@@ -455,6 +455,62 @@ func TestSearchDirectoryNonRecursive(t *testing.T) {
 	}
 }
 
+func TestSearchMultipleDirectories(t *testing.T) {
+	tmpDir1 := setupTestDir(t)
+	defer cleanupTestDir(t, tmpDir1)
+
+	tmpDir2 := setupTestDir(t)
+	defer cleanupTestDir(t, tmpDir2)
+
+	// Create files in first directory
+	createTestFile(t, tmpDir1, "file1.go", "package main\nfunc main() {}")
+	createTestFile(t, tmpDir1, "file2.go", "package utils\nfunc helper() {}")
+
+	// Create files in second directory
+	createTestFile(t, tmpDir2, "file3.go", "package models")
+	createTestFile(t, tmpDir2, "file4.go", "package handlers\nfunc handler() {}")
+
+	config := Config{
+		Dirs:   []string{tmpDir1, tmpDir2},
+		Search: "package",
+		Ext:    ".go",
+	}
+
+	result, err := searchDirectories(config)
+	if err != nil {
+		t.Fatalf("searchDirectories failed: %v", err)
+	}
+
+	// Should find results in both directories
+	if len(result.Directories) != 2 {
+		t.Fatalf("Expected 2 directories, got %d", len(result.Directories))
+	}
+
+	// Verify first directory results
+	dir1 := result.Directories[0]
+	if dir1.Dir != tmpDir1 {
+		t.Errorf("Expected first directory to be %s, got %s", tmpDir1, dir1.Dir)
+	}
+	if dir1.MatchesFound != 2 {
+		t.Errorf("Expected 2 matches in first directory, got %d", dir1.MatchesFound)
+	}
+	if len(dir1.Files) != 2 {
+		t.Errorf("Expected 2 files in first directory, got %d", len(dir1.Files))
+	}
+
+	// Verify second directory results
+	dir2 := result.Directories[1]
+	if dir2.Dir != tmpDir2 {
+		t.Errorf("Expected second directory to be %s, got %s", tmpDir2, dir2.Dir)
+	}
+	if dir2.MatchesFound != 2 {
+		t.Errorf("Expected 2 matches in second directory, got %d", dir2.MatchesFound)
+	}
+	if len(dir2.Files) != 2 {
+		t.Errorf("Expected 2 files in second directory, got %d", len(dir2.Files))
+	}
+}
+
 // MCP JSON-RPC handler tests
 
 func TestHandleInitialize(t *testing.T) {
