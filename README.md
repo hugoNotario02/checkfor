@@ -60,7 +60,7 @@ Use the `checkfor` tool when searching a SINGLE directory at SINGLE depth (non-r
 - You need minimal, token-efficient output
 
 **Example:**
-```
+
 checkfor tool with:
 - dir: "/absolute/path/to/directory"
 - search: "oldFunctionName"
@@ -68,7 +68,7 @@ checkfor tool with:
 - case_insensitive: false (optional)
 - whole_word: false (optional)
 - context: 0 (optional, number of context lines)
-```
+
 
 ### When NOT to use checkfor
 - Recursive/deep directory searches (use Grep instead)
