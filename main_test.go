@@ -148,14 +148,14 @@ func TestSearchFileCaseInsensitive(t *testing.T) {
 	defer cleanupTestDir(t, tmpDir)
 
 	content := "Hello World\nGoodbye World\nHELLO again"
-	createTestFile(t, tmpDir, "test.txt", content)
+	createTestFile(t, tmpDir, "test.rtf", content)
 
 	config := Config{
 		Search:          "hello",
 		CaseInsensitive: true,
 	}
 
-	matches, err := searchFile(filepath.Join(tmpDir, "test.txt"), config)
+	matches, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
 	if err != nil {
 		t.Fatalf("searchFile failed: %v", err)
 	}
@@ -174,14 +174,14 @@ func TestSearchFileWholeWord(t *testing.T) {
 	defer cleanupTestDir(t, tmpDir)
 
 	content := "log message\nlogger info\nlog\ncatalog"
-	createTestFile(t, tmpDir, "test.txt", content)
+	createTestFile(t, tmpDir, "test.rtf", content)
 
 	config := Config{
 		Search:    "log",
 		WholeWord: true,
 	}
 
-	matches, err := searchFile(filepath.Join(tmpDir, "test.txt"), config)
+	matches, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
 	if err != nil {
 		t.Fatalf("searchFile failed: %v", err)
 	}
@@ -196,14 +196,14 @@ func TestSearchFileWithContext(t *testing.T) {
 	defer cleanupTestDir(t, tmpDir)
 
 	content := "line1\nline2\ntarget\nline4\nline5"
-	createTestFile(t, tmpDir, "test.txt", content)
+	createTestFile(t, tmpDir, "test.rtf", content)
 
 	config := Config{
 		Search:  "target",
 		Context: 1,
 	}
 
-	matches, err := searchFile(filepath.Join(tmpDir, "test.txt"), config)
+	matches, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
 	if err != nil {
 		t.Fatalf("searchFile failed: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestSearchDirectoryExtensionFilter(t *testing.T) {
 	defer cleanupTestDir(t, tmpDir)
 
 	createTestFile(t, tmpDir, "file1.go", "package main")
-	createTestFile(t, tmpDir, "file2.txt", "package main")
+	createTestFile(t, tmpDir, "file2.rtf", "package main")
 	createTestFile(t, tmpDir, "file3.go", "package main")
 
 	config := Config{
@@ -255,7 +255,7 @@ func TestSearchDirectoryNoMatches(t *testing.T) {
 	tmpDir := setupTestDir(t)
 	defer cleanupTestDir(t, tmpDir)
 
-	createTestFile(t, tmpDir, "file.txt", "hello world")
+	createTestFile(t, tmpDir, "file.rtf", "hello world")
 
 	config := Config{
 		Dir:    tmpDir,
@@ -281,14 +281,14 @@ func TestSearchDirectoryNonRecursive(t *testing.T) {
 	defer cleanupTestDir(t, tmpDir)
 
 	// Create file in root
-	createTestFile(t, tmpDir, "root.txt", "target")
+	createTestFile(t, tmpDir, "root.rtf", "target")
 
 	// Create subdirectory with file
 	subDir := filepath.Join(tmpDir, "subdir")
 	if err := os.Mkdir(subDir, 0755); err != nil {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
-	createTestFile(t, subDir, "sub.txt", "target")
+	createTestFile(t, subDir, "sub.rtf", "target")
 
 	config := Config{
 		Dir:    tmpDir,
@@ -305,8 +305,8 @@ func TestSearchDirectoryNonRecursive(t *testing.T) {
 		t.Errorf("Expected 1 file (non-recursive), got %d", len(result.Files))
 	}
 
-	if result.Files[0].Path != "root.txt" {
-		t.Errorf("Expected root.txt, got %s", result.Files[0].Path)
+	if result.Files[0].Path != "root.rtf" {
+		t.Errorf("Expected root.rtf, got %s", result.Files[0].Path)
 	}
 }
 

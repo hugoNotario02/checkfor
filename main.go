@@ -125,7 +125,7 @@ func parseFlags() Config {
 	flag.BoolVar(&config.MCPMode, "mcp", false, "Run as MCP server")
 	flag.StringVar(&config.Dir, "dir", "", "Directory to search (required in CLI mode)")
 	flag.StringVar(&config.Search, "search", "", "String to search for (required in CLI mode)")
-	flag.StringVar(&config.Ext, "ext", "", "File extension to filter (e.g., .go, .txt)")
+	flag.StringVar(&config.Ext, "ext", "", "File extension to filter (e.g., .go, .rtf)")
 	flag.BoolVar(&config.CaseInsensitive, "case-insensitive", false, "Perform case-insensitive search")
 	flag.BoolVar(&config.WholeWord, "whole-word", false, "Match whole words only")
 	flag.IntVar(&config.Context, "context", 0, "Number of context lines before and after match")
@@ -224,7 +224,7 @@ func handleToolsList(req JSONRPCRequest) {
 						},
 						"ext": {
 							Type:        "string",
-							Description: "File extension to filter (e.g., '.go', '.txt'). Optional.",
+							Description: "File extension to filter (e.g., '.go', '.rtf'). Optional.",
 						},
 						"case_insensitive": {
 							Type:        "boolean",
