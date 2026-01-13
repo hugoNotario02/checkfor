@@ -53,7 +53,7 @@ checkfor --help
 
 To use checkfor as an MCP tool in Claude Code:
 
-**Step 1:** Add to your Claude Code MCP configuration (`~/.claude/mcp.json`):
+**Step 1:** Add to your Claude Code MCP configuration (project `.mcp.json` or global `~/.claude/mcp.json`):
 
 ```json
 {
