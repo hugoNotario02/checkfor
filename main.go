@@ -22,19 +22,28 @@ type FileMatch struct {
 	Matches []Match `json:"matches"`
 }
 
+type DirectoryResult struct {
+	Dir             string      `json:"dir"`
+	MatchesFound    int         `json:"matches_found"`
+	OriginalMatches int         `json:"original_matches,omitempty"`
+	FilteredMatches int         `json:"filtered_matches,omitempty"`
+	Files           []FileMatch `json:"files"`
+}
+
 type Result struct {
-	MatchesFound int         `json:"matches_found"`
-	Files        []FileMatch `json:"files"`
+	Directories []DirectoryResult `json:"directories"`
 }
 
 type Config struct {
-	Dir             string
+	Dirs            []string
 	Search          string
 	Ext             string
+	Exclude         []string
 	CaseInsensitive bool
 	WholeWord       bool
 	Context         int
-	MCPMode         bool
+	HideFilterStats bool
+	CLIMode         bool
 }
 
 // MCP JSON-RPC types
@@ -111,44 +120,64 @@ type ContentItem struct {
 func main() {
 	config := parseFlags()
 
-	if config.MCPMode {
-		runMCPServer()
+	if config.CLIMode {
+		runCLI(config)
 		return
 	}
 
-	runCLI(config)
+	runMCPServer()
 }
 
 func parseFlags() Config {
 	config := Config{}
+	var dirStr string
+	var excludeStr string
 
-	flag.BoolVar(&config.MCPMode, "mcp", false, "Run as MCP server")
-	flag.StringVar(&config.Dir, "dir", "", "Directory to search (required in CLI mode)")
-	flag.StringVar(&config.Search, "search", "", "String to search for (required in CLI mode)")
+	flag.BoolVar(&config.CLIMode, "cli", false, "Run in CLI mode (default is MCP server mode)")
+	flag.StringVar(&dirStr, "dir", "", "Comma-separated list of directories to search (defaults to current directory)")
+	flag.StringVar(&config.Search, "search", "", "String to search for (required)")
 	flag.StringVar(&config.Ext, "ext", "", "File extension to filter (e.g., .go, .rtf)")
+	flag.StringVar(&excludeStr, "exclude", "", "Comma-separated list of strings to exclude from results")
 	flag.BoolVar(&config.CaseInsensitive, "case-insensitive", false, "Perform case-insensitive search")
 	flag.BoolVar(&config.WholeWord, "whole-word", false, "Match whole words only")
 	flag.IntVar(&config.Context, "context", 0, "Number of context lines before and after match")
+	flag.BoolVar(&config.HideFilterStats, "hide-filter-stats", false, "Hide original_matches and filtered_matches from output")
 
 	flag.Parse()
+
+	if dirStr != "" {
+		config.Dirs = strings.Split(dirStr, ",")
+		for i := range config.Dirs {
+			config.Dirs[i] = strings.TrimSpace(config.Dirs[i])
+		}
+	} else {
+		config.Dirs = []string{"."}
+	}
+
+	if excludeStr != "" {
+		config.Exclude = strings.Split(excludeStr, ",")
+		for i := range config.Exclude {
+			config.Exclude[i] = strings.TrimSpace(config.Exclude[i])
+		}
+	}
 
 	return config
 }
 
 func runCLI(config Config) {
-	if config.Dir == "" || config.Search == "" {
-		fmt.Fprintln(os.Stderr, "Error: --dir and --search are required")
+	if config.Search == "" {
+		fmt.Fprintln(os.Stderr, "Error: --search is required")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	result, err := searchDirectory(config)
+	result, err := searchDirectories(config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	output, err := json.MarshalIndent(result, "", "  ")
+	output, err := json.Marshal(result)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
 		os.Exit(1)
@@ -210,13 +239,13 @@ func handleToolsList(req JSONRPCRequest) {
 		Tools: []Tool{
 			{
 				Name:        "checkfor",
-				Description: "Search files in a directory for a string pattern. Single-depth (non-recursive) scanning with optional extension filtering, case-insensitive search, whole-word matching, and context lines.",
+				Description: "Search files in directories for a string pattern. Single-depth (non-recursive) scanning with optional extension filtering, case-insensitive search, whole-word matching, and context lines.",
 				InputSchema: InputSchema{
 					Type: "object",
 					Properties: map[string]Property{
 						"dir": {
-							Type:        "string",
-							Description: "Directory path to search (absolute path required)",
+							Type:        "array",
+							Description: "Array of directory paths to search. Can also accept a single string for backwards compatibility. Defaults to current directory if not provided.",
 						},
 						"search": {
 							Type:        "string",
@@ -225,6 +254,10 @@ func handleToolsList(req JSONRPCRequest) {
 						"ext": {
 							Type:        "string",
 							Description: "File extension to filter (e.g., '.go', '.rtf'). Optional.",
+						},
+						"exclude": {
+							Type:        "array",
+							Description: "Array of strings to exclude from results. Matches containing any of these strings will be filtered out. Optional.",
 						},
 						"case_insensitive": {
 							Type:        "boolean",
@@ -241,8 +274,13 @@ func handleToolsList(req JSONRPCRequest) {
 							Description: "Number of context lines before and after each match. Optional, defaults to 0.",
 							Default:     0,
 						},
+						"hide_filter_stats": {
+							Type:        "boolean",
+							Description: "Hide original_matches and filtered_matches from output. Optional, defaults to false.",
+							Default:     false,
+						},
 					},
-					Required: []string{"dir", "search"},
+					Required: []string{"search"},
 				},
 			},
 		},
@@ -262,12 +300,6 @@ func handleToolsCall(req JSONRPCRequest) {
 		return
 	}
 
-	dir, ok := params.Arguments["dir"].(string)
-	if !ok {
-		sendError(req.ID, -32602, "Missing or invalid 'dir' parameter")
-		return
-	}
-
 	search, ok := params.Arguments["search"].(string)
 	if !ok {
 		sendError(req.ID, -32602, "Missing or invalid 'search' parameter")
@@ -275,12 +307,38 @@ func handleToolsCall(req JSONRPCRequest) {
 	}
 
 	config := Config{
-		Dir:    dir,
 		Search: search,
+	}
+
+	if dirParam, exists := params.Arguments["dir"]; exists {
+		switch v := dirParam.(type) {
+		case string:
+			config.Dirs = []string{v}
+		case []any:
+			config.Dirs = make([]string, 0, len(v))
+			for _, d := range v {
+				if str, ok := d.(string); ok {
+					config.Dirs = append(config.Dirs, str)
+				}
+			}
+		}
+	}
+
+	if len(config.Dirs) == 0 {
+		config.Dirs = []string{"."}
 	}
 
 	if ext, ok := params.Arguments["ext"].(string); ok {
 		config.Ext = ext
+	}
+
+	if excludeArray, ok := params.Arguments["exclude"].([]any); ok {
+		config.Exclude = make([]string, 0, len(excludeArray))
+		for _, v := range excludeArray {
+			if str, ok := v.(string); ok {
+				config.Exclude = append(config.Exclude, str)
+			}
+		}
 	}
 
 	if caseInsensitive, ok := params.Arguments["case_insensitive"].(bool); ok {
@@ -295,13 +353,17 @@ func handleToolsCall(req JSONRPCRequest) {
 		config.Context = int(context)
 	}
 
-	result, err := searchDirectory(config)
+	if hideFilterStats, ok := params.Arguments["hide_filter_stats"].(bool); ok {
+		config.HideFilterStats = hideFilterStats
+	}
+
+	result, err := searchDirectories(config)
 	if err != nil {
 		sendError(req.ID, -32603, fmt.Sprintf("Search failed: %v", err))
 		return
 	}
 
-	jsonResult, err := json.MarshalIndent(result, "", "  ")
+	jsonResult, err := json.Marshal(result)
 	if err != nil {
 		sendError(req.ID, -32603, "Failed to marshal result")
 		return
@@ -350,13 +412,31 @@ func sendError(id any, code int, message string) {
 	fmt.Println(string(data))
 }
 
-func searchDirectory(config Config) (*Result, error) {
-	entries, err := os.ReadDir(config.Dir)
+func searchDirectories(config Config) (*Result, error) {
+	result := &Result{
+		Directories: make([]DirectoryResult, 0, len(config.Dirs)),
+	}
+
+	for _, dir := range config.Dirs {
+		dirResult, err := searchDirectory(dir, config)
+		if err != nil {
+			return nil, err
+		}
+
+		result.Directories = append(result.Directories, *dirResult)
+	}
+
+	return result, nil
+}
+
+func searchDirectory(dir string, config Config) (*DirectoryResult, error) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
-	result := &Result{
+	dirResult := &DirectoryResult{
+		Dir:   dir,
 		Files: make([]FileMatch, 0),
 	}
 
@@ -371,29 +451,34 @@ func searchDirectory(config Config) (*Result, error) {
 			continue
 		}
 
-		fullPath := filepath.Join(config.Dir, filename)
-		matches, err := searchFile(fullPath, config)
+		fullPath := filepath.Join(dir, filename)
+		matches, originalCount, filteredCount, err := searchFile(fullPath, config)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to search %s: %v\n", fullPath, err)
 			continue
 		}
 
+		if !config.HideFilterStats && len(config.Exclude) > 0 {
+			dirResult.OriginalMatches += originalCount
+			dirResult.FilteredMatches += filteredCount
+		}
+
 		if len(matches) > 0 {
-			result.Files = append(result.Files, FileMatch{
+			dirResult.Files = append(dirResult.Files, FileMatch{
 				Path:    filename,
 				Matches: matches,
 			})
-			result.MatchesFound += len(matches)
+			dirResult.MatchesFound += len(matches)
 		}
 	}
 
-	return result, nil
+	return dirResult, nil
 }
 
-func searchFile(path string, config Config) ([]Match, error) {
+func searchFile(path string, config Config) ([]Match, int, int, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 	defer func() {
 		if cerr := file.Close(); cerr != nil {
@@ -408,10 +493,12 @@ func searchFile(path string, config Config) ([]Match, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 
 	var matches []Match
+	originalCount := 0
+	filteredCount := 0
 	searchTerm := config.Search
 	if config.CaseInsensitive {
 		searchTerm = strings.ToLower(searchTerm)
@@ -431,21 +518,40 @@ func searchFile(path string, config Config) ([]Match, error) {
 		}
 
 		if found {
-			match := Match{
-				Line:    i + 1,
-				Content: line,
+			originalCount++
+			excluded := false
+			for _, excludePattern := range config.Exclude {
+				excludeToCheck := excludePattern
+				lineForExclude := line
+				if config.CaseInsensitive {
+					excludeToCheck = strings.ToLower(excludePattern)
+					lineForExclude = lineToCheck
+				}
+				if strings.Contains(lineForExclude, excludeToCheck) {
+					excluded = true
+					break
+				}
 			}
 
-			if config.Context > 0 {
-				match.ContextBefore = getContextBefore(lines, i, config.Context)
-				match.ContextAfter = getContextAfter(lines, i, config.Context)
-			}
+			if excluded {
+				filteredCount++
+			} else {
+				match := Match{
+					Line:    i + 1,
+					Content: line,
+				}
 
-			matches = append(matches, match)
+				if config.Context > 0 {
+					match.ContextBefore = getContextBefore(lines, i, config.Context)
+					match.ContextAfter = getContextAfter(lines, i, config.Context)
+				}
+
+				matches = append(matches, match)
+			}
 		}
 	}
 
-	return matches, nil
+	return matches, originalCount, filteredCount, nil
 }
 
 func containsWholeWord(text, word string) bool {

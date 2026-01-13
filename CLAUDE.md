@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`checkfor` is a lightweight Go CLI tool for single-depth directory file searching with JSON output. It's optimized for token-efficient verification during refactoring tasks. The tool has dual operation modes: standalone CLI and MCP (Model Context Protocol) server.
+`checkfor` is an MCP server tool for multi-directory file searching with compact JSON output. It's optimized for AI-driven, token-efficient verification during refactoring tasks. The tool operates primarily as an MCP server with an optional CLI mode for testing.
 
 ## Build and Development Commands
 
@@ -24,56 +24,81 @@ go test -v
 ```
 
 Test coverage includes:
-- Core search functions (whole-word matching, context extraction)
+- Core search functions (whole-word matching, context extraction, exclude filtering)
 - File filtering (extension, case-insensitive, whole-word)
+- Filter statistics tracking (original_matches, filtered_matches)
 - MCP JSON-RPC protocol compliance
-- Integration tests (directory scanning, non-recursive behavior)
+- Integration tests (multi-directory scanning, non-recursive behavior, per-directory results)
 
-### CLI Usage
+### MCP Mode (Default)
 ```bash
-checkfor --dir <directory> --search <string> [options]
+checkfor
+```
+
+The MCP server runs by default and communicates via JSON-RPC 2.0 over stdin/stdout. Configuration is in `.mcp.json`.
+
+### CLI Usage (Testing/Scripting)
+```bash
+checkfor --cli --search <string> [options]
 ```
 
 Required flags:
-- `--dir` - Directory to search (absolute path recommended)
 - `--search` - String pattern to search for
 
 Optional flags:
+- `--cli` - Run in CLI mode (default is MCP server mode)
+- `--dir` - Comma-separated list of directories to search (defaults to current directory)
 - `--ext` - File extension filter (e.g., `.go`, `.txt`)
+- `--exclude` - Comma-separated list of strings to exclude from results
 - `--case-insensitive` - Case-insensitive search
 - `--whole-word` - Match whole words only
 - `--context` - Number of context lines (default: 0)
-
-### MCP Server Mode
-```bash
-checkfor --mcp
-```
-
-The MCP server communicates via JSON-RPC 2.0 over stdin/stdout. Configuration is in `.mcp.json`.
+- `--hide-filter-stats` - Hide original_matches and filtered_matches from output
 
 ## Architecture
 
-### Dual-Mode Design
+### Mode Design
 
-The application operates in two distinct modes determined at startup:
+The application operates in two modes determined at startup:
 
-1. **CLI Mode** (main.go:138-158): Standard command-line tool that outputs JSON results to stdout
-2. **MCP Server Mode** (main.go:160-176): JSON-RPC 2.0 server for integration with MCP-compatible clients
+1. **MCP Server Mode (Default)**: JSON-RPC 2.0 server for integration with MCP-compatible clients (Claude Code)
+2. **CLI Mode**: Standard command-line tool that outputs JSON results to stdout (requires `--cli` flag)
 
-Mode selection happens in `main()` based on the `--mcp` flag.
+Mode selection happens in `main()` based on the `--cli` flag. Default behavior is MCP server mode.
 
 ### Search Algorithm
 
-The core search logic in `searchDirectory()` (main.go:345-383):
+The search flow:
+1. `searchDirectories()` - Iterates over all provided directories
+2. `searchDirectory()` - Processes single directory, returns DirectoryResult
+3. `searchFile()` - Processes individual files, applies filters, returns matches with statistics
+
+**Key features:**
 - **Non-recursive**: Only scans immediate directory contents (skips subdirectories)
+- **Multi-directory**: Searches multiple directories in one invocation
+- **Exclude filtering**: Filters out matches containing any of the exclude patterns
+- **Filter statistics**: Tracks original_matches (before filtering) and filtered_matches (excluded count)
 - **Extension filtering**: Applied before file reading for efficiency
-- **Per-file searching**: Each file processed independently via `searchFile()`
+- **Per-file searching**: Each file processed independently
 
 Key implementation details:
-- Files are read entirely into memory as line slices (main.go:392-400)
-- Whole-word matching uses custom `containsWholeWord()` (main.go:439-463) that checks word boundaries using `isWordChar()` (alphanumeric + underscore)
-- Context lines extracted via `getContextBefore()` and `getContextAfter()` (main.go:469-483)
+- Files are read entirely into memory as line slices
+- Whole-word matching uses custom `containsWholeWord()` that checks word boundaries using `isWordChar()` (alphanumeric + underscore)
+- Context lines extracted via `getContextBefore()` and `getContextAfter()`
 - Case-insensitive search converts both search term and line content to lowercase
+- Exclude patterns also respect case-insensitive flag
+
+### Output Format
+
+**Compact JSON with per-directory structure:**
+```json
+{"directories":[{"dir":"./pkg","matches_found":3,"original_matches":5,"filtered_matches":2,"files":[{"path":"user.go","matches":[...]}]}]}
+```
+
+**Token efficiency:**
+- Compact JSON (no newlines): 41% smaller
+- Relative file paths: 68% reduction in path data
+- Per-directory organization: Better AI reasoning, no path parsing needed
 
 ### MCP Protocol Implementation
 
@@ -86,14 +111,28 @@ The MCP server implements three JSON-RPC methods:
 
 Key types:
 - `Config`: Unified configuration for both CLI and MCP modes
-- `Result`: Search results with `matches_found` count and file matches array
+  - `Dirs []string` - List of directories to search
+  - `Exclude []string` - List of exclude patterns
+  - `HideFilterStats bool` - Whether to hide filter statistics
+  - `CLIMode bool` - Whether to run in CLI mode
+- `Result`: Top-level result with `Directories []DirectoryResult`
+- `DirectoryResult`: Per-directory results with:
+  - `Dir string` - Directory path
+  - `MatchesFound int` - Matches in this directory after filtering
+  - `OriginalMatches int` - Matches before filtering (omitted if no exclude or hidden)
+  - `FilteredMatches int` - Excluded matches count (omitted if no exclude or hidden)
+  - `Files []FileMatch` - File matches with relative paths
 - `FileMatch`: Contains relative file path and array of matches
 - `Match`: Line number, content, and optional context arrays
 
 ## Important Notes
 
 - The tool is **single-depth only** - it does not recurse into subdirectories
-- File paths in results are relative (filename only, not full path)
-- All JSON output uses 2-space indentation
-- Warnings for unreadable files go to stderr (main.go:369)
+- Default mode is **MCP server** - runs without flags
+- CLI mode requires `--cli` flag
+- File paths in results are **relative to each directory**
+- All JSON output is **compact** (no indentation/newlines) for token efficiency
+- Filter statistics only appear when exclude patterns are used and not hidden
+- Multi-directory support enables controlled searches across specific packages
+- Warnings for unreadable files go to stderr
 - MCP mode expects one JSON-RPC request per line on stdin

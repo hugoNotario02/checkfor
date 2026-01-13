@@ -155,7 +155,7 @@ func TestSearchFileCaseInsensitive(t *testing.T) {
 		CaseInsensitive: true,
 	}
 
-	matches, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
+	matches, _, _, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
 	if err != nil {
 		t.Fatalf("searchFile failed: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestSearchFileWholeWord(t *testing.T) {
 		WholeWord: true,
 	}
 
-	matches, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
+	matches, _, _, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
 	if err != nil {
 		t.Fatalf("searchFile failed: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestSearchFileWithContext(t *testing.T) {
 		Context: 1,
 	}
 
-	matches, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
+	matches, _, _, err := searchFile(filepath.Join(tmpDir, "test.rtf"), config)
 	if err != nil {
 		t.Fatalf("searchFile failed: %v", err)
 	}
@@ -221,6 +221,133 @@ func TestSearchFileWithContext(t *testing.T) {
 	}
 }
 
+func TestSearchFileWithExclude(t *testing.T) {
+	tmpDir := setupTestDir(t)
+	defer cleanupTestDir(t, tmpDir)
+
+	content := "m.Table user\nm.Tables schema\nm.Table orders\nm.TableName config"
+	createTestFile(t, tmpDir, "test.go", content)
+
+	config := Config{
+		Search:  "m.Table",
+		Exclude: []string{"m.Tables", "m.TableName"},
+	}
+
+	matches, _, _, err := searchFile(filepath.Join(tmpDir, "test.go"), config)
+	if err != nil {
+		t.Fatalf("searchFile failed: %v", err)
+	}
+
+	if len(matches) != 2 {
+		t.Errorf("Expected 2 matches (lines 1 and 3), got %d", len(matches))
+	}
+
+	if len(matches) >= 2 {
+		if matches[0].Line != 1 || matches[1].Line != 3 {
+			t.Errorf("Expected lines 1 and 3, got %d and %d", matches[0].Line, matches[1].Line)
+		}
+	}
+}
+
+func TestSearchFileWithExcludeCaseInsensitive(t *testing.T) {
+	tmpDir := setupTestDir(t)
+	defer cleanupTestDir(t, tmpDir)
+
+	content := "m.Table user\nM.TABLES schema\nm.table orders"
+	createTestFile(t, tmpDir, "test.go", content)
+
+	config := Config{
+		Search:          "m.table",
+		Exclude:         []string{"m.tables"},
+		CaseInsensitive: true,
+	}
+
+	matches, _, _, err := searchFile(filepath.Join(tmpDir, "test.go"), config)
+	if err != nil {
+		t.Fatalf("searchFile failed: %v", err)
+	}
+
+	if len(matches) != 2 {
+		t.Errorf("Expected 2 matches (lines 1 and 3), got %d", len(matches))
+	}
+}
+
+func TestSearchDirectoryWithFilterStats(t *testing.T) {
+	tmpDir := setupTestDir(t)
+	defer cleanupTestDir(t, tmpDir)
+
+	createTestFile(t, tmpDir, "file1.go", "m.Table user\nm.Tables schema\nm.Table orders\nm.TableName config")
+	createTestFile(t, tmpDir, "file2.go", "m.Table product\nm.Table category")
+
+	config := Config{
+		Dirs:    []string{tmpDir},
+		Search:  "m.Table",
+		Exclude: []string{"m.Tables", "m.TableName"},
+		Ext:     ".go",
+	}
+
+	result, err := searchDirectories(config)
+	if err != nil {
+		t.Fatalf("searchDirectory failed: %v", err)
+	}
+
+	if len(result.Directories) != 1 {
+		t.Fatalf("Expected 1 directory, got %d", len(result.Directories))
+	}
+
+	dir := result.Directories[0]
+
+	if dir.MatchesFound != 4 {
+		t.Errorf("Expected 4 matches found, got %d", dir.MatchesFound)
+	}
+
+	if dir.OriginalMatches != 6 {
+		t.Errorf("Expected 6 original matches, got %d", dir.OriginalMatches)
+	}
+
+	if dir.FilteredMatches != 2 {
+		t.Errorf("Expected 2 filtered matches, got %d", dir.FilteredMatches)
+	}
+}
+
+func TestSearchDirectoryHideFilterStats(t *testing.T) {
+	tmpDir := setupTestDir(t)
+	defer cleanupTestDir(t, tmpDir)
+
+	createTestFile(t, tmpDir, "file1.go", "m.Table user\nm.Tables schema\nm.Table orders")
+
+	config := Config{
+		Dirs:            []string{tmpDir},
+		Search:          "m.Table",
+		Exclude:         []string{"m.Tables"},
+		HideFilterStats: true,
+		Ext:             ".go",
+	}
+
+	result, err := searchDirectories(config)
+	if err != nil {
+		t.Fatalf("searchDirectory failed: %v", err)
+	}
+
+	if len(result.Directories) != 1 {
+		t.Fatalf("Expected 1 directory, got %d", len(result.Directories))
+	}
+
+	dir := result.Directories[0]
+
+	if dir.MatchesFound != 2 {
+		t.Errorf("Expected 2 matches found, got %d", dir.MatchesFound)
+	}
+
+	if dir.OriginalMatches != 0 {
+		t.Errorf("Expected 0 original matches (hidden), got %d", dir.OriginalMatches)
+	}
+
+	if dir.FilteredMatches != 0 {
+		t.Errorf("Expected 0 filtered matches (hidden), got %d", dir.FilteredMatches)
+	}
+}
+
 // Integration tests
 
 func TestSearchDirectoryExtensionFilter(t *testing.T) {
@@ -232,22 +359,28 @@ func TestSearchDirectoryExtensionFilter(t *testing.T) {
 	createTestFile(t, tmpDir, "file3.go", "package main")
 
 	config := Config{
-		Dir:    tmpDir,
+		Dirs:   []string{tmpDir},
 		Search: "package",
 		Ext:    ".go",
 	}
 
-	result, err := searchDirectory(config)
+	result, err := searchDirectories(config)
 	if err != nil {
 		t.Fatalf("searchDirectory failed: %v", err)
 	}
 
-	if len(result.Files) != 2 {
-		t.Errorf("Expected 2 .go files with matches, got %d", len(result.Files))
+	if len(result.Directories) != 1 {
+		t.Fatalf("Expected 1 directory, got %d", len(result.Directories))
 	}
 
-	if result.MatchesFound != 2 {
-		t.Errorf("Expected 2 total matches, got %d", result.MatchesFound)
+	dir := result.Directories[0]
+
+	if len(dir.Files) != 2 {
+		t.Errorf("Expected 2 .go files with matches, got %d", len(dir.Files))
+	}
+
+	if dir.MatchesFound != 2 {
+		t.Errorf("Expected 2 total matches, got %d", dir.MatchesFound)
 	}
 }
 
@@ -258,21 +391,27 @@ func TestSearchDirectoryNoMatches(t *testing.T) {
 	createTestFile(t, tmpDir, "file.rtf", "hello world")
 
 	config := Config{
-		Dir:    tmpDir,
+		Dirs:   []string{tmpDir},
 		Search: "nonexistent",
 	}
 
-	result, err := searchDirectory(config)
+	result, err := searchDirectories(config)
 	if err != nil {
 		t.Fatalf("searchDirectory failed: %v", err)
 	}
 
-	if len(result.Files) != 0 {
-		t.Errorf("Expected 0 files with matches, got %d", len(result.Files))
+	if len(result.Directories) != 1 {
+		t.Fatalf("Expected 1 directory, got %d", len(result.Directories))
 	}
 
-	if result.MatchesFound != 0 {
-		t.Errorf("Expected 0 matches, got %d", result.MatchesFound)
+	dir := result.Directories[0]
+
+	if len(dir.Files) != 0 {
+		t.Errorf("Expected 0 files with matches, got %d", len(dir.Files))
+	}
+
+	if dir.MatchesFound != 0 {
+		t.Errorf("Expected 0 matches, got %d", dir.MatchesFound)
 	}
 }
 
@@ -291,22 +430,28 @@ func TestSearchDirectoryNonRecursive(t *testing.T) {
 	createTestFile(t, subDir, "sub.rtf", "target")
 
 	config := Config{
-		Dir:    tmpDir,
+		Dirs:   []string{tmpDir},
 		Search: "target",
 	}
 
-	result, err := searchDirectory(config)
+	result, err := searchDirectories(config)
 	if err != nil {
 		t.Fatalf("searchDirectory failed: %v", err)
 	}
 
 	// Should only find the root file, not the subdirectory file
-	if len(result.Files) != 1 {
-		t.Errorf("Expected 1 file (non-recursive), got %d", len(result.Files))
+	if len(result.Directories) != 1 {
+		t.Fatalf("Expected 1 directory, got %d", len(result.Directories))
 	}
 
-	if result.Files[0].Path != "root.rtf" {
-		t.Errorf("Expected root.rtf, got %s", result.Files[0].Path)
+	dir := result.Directories[0]
+
+	if len(dir.Files) != 1 {
+		t.Errorf("Expected 1 file (non-recursive), got %d", len(dir.Files))
+	}
+
+	if dir.Files[0].Path != "root.rtf" {
+		t.Errorf("Expected root.rtf, got %s", dir.Files[0].Path)
 	}
 }
 
@@ -423,16 +568,21 @@ func TestToolCallParamsMarshaling(t *testing.T) {
 
 func TestResultJSONOutput(t *testing.T) {
 	result := Result{
-		MatchesFound: 1,
-		Files: []FileMatch{
+		Directories: []DirectoryResult{
 			{
-				Path: "test.go",
-				Matches: []Match{
+				Dir:          "/tmp/test",
+				MatchesFound: 1,
+				Files: []FileMatch{
 					{
-						Line:          42,
-						Content:       "target line",
-						ContextBefore: []string{"line before"},
-						ContextAfter:  []string{"line after"},
+						Path: "test.go",
+						Matches: []Match{
+							{
+								Line:          42,
+								Content:       "target line",
+								ContextBefore: []string{"line before"},
+								ContextAfter:  []string{"line after"},
+							},
+						},
 					},
 				},
 			},
@@ -449,19 +599,25 @@ func TestResultJSONOutput(t *testing.T) {
 		t.Fatalf("Failed to unmarshal result: %v", err)
 	}
 
-	if decoded.MatchesFound != 1 {
-		t.Errorf("Expected matches_found 1, got %d", decoded.MatchesFound)
+	if len(decoded.Directories) != 1 {
+		t.Fatalf("Expected 1 directory, got %d", len(decoded.Directories))
 	}
 
-	if len(decoded.Files) != 1 {
-		t.Fatalf("Expected 1 file, got %d", len(decoded.Files))
+	dir := decoded.Directories[0]
+
+	if dir.MatchesFound != 1 {
+		t.Errorf("Expected matches_found 1, got %d", dir.MatchesFound)
 	}
 
-	if decoded.Files[0].Path != "test.go" {
-		t.Errorf("Expected path test.go, got %s", decoded.Files[0].Path)
+	if len(dir.Files) != 1 {
+		t.Fatalf("Expected 1 file, got %d", len(dir.Files))
 	}
 
-	if decoded.Files[0].Matches[0].Line != 42 {
-		t.Errorf("Expected line 42, got %d", decoded.Files[0].Matches[0].Line)
+	if dir.Files[0].Path != "test.go" {
+		t.Errorf("Expected path test.go, got %s", dir.Files[0].Path)
+	}
+
+	if dir.Files[0].Matches[0].Line != 42 {
+		t.Errorf("Expected line 42, got %d", dir.Files[0].Matches[0].Line)
 	}
 }

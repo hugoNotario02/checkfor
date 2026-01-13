@@ -5,16 +5,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hegner123/checkfor)](https://goreportcard.com/report/github.com/hegner123/checkfor)
 
-A lightweight CLI tool for searching files in a directory with JSON output. Designed for token-efficient verification during refactoring tasks.
+An MCP server tool for searching files in directories with compact JSON output. Designed for AI-optimized, token-efficient verification during refactoring workflows.
 
 ## Features
 
-- Single-depth directory scanning (non-recursive)
-- File extension filtering
-- Case-insensitive search option
-- Whole-word matching option
-- Context lines (show N lines before/after matches)
-- JSON output for easy parsing
+- **MCP server by default** - Optimized for Claude Code integration
+- **Multi-directory search** - Search across multiple directories in controlled, single-depth scans
+- **Compact JSON output** - 41% smaller than pretty-printed JSON for maximum token efficiency
+- **Per-directory results** - Organized output with relative paths for better AI reasoning
+- **Exclude filtering** - Filter out unwanted matches with multiple exclude patterns
+- **Filter statistics** - Track original vs filtered match counts per directory
+- **File extension filtering** - Target specific file types
+- **Case-insensitive search** - Optional case-insensitive matching
+- **Whole-word matching** - Avoid false positives from partial matches
+- **Context lines** - Show N lines before/after matches for understanding
 
 ## Installation
 
@@ -26,10 +30,7 @@ go build -o checkfor
 
 ### 2. Install to PATH (Required for MCP mode)
 
-Installing checkfor to your system PATH allows:
-- **CLI usage from anywhere**: Run `checkfor` from any directory
-- **MCP server integration**: Claude Code requires the binary in PATH to launch it as an MCP server
-- **Script integration**: Use checkfor in shell scripts and automation workflows
+Installing checkfor to your system PATH allows MCP server integration with Claude Code.
 
 **System-wide installation** (recommended):
 ```bash
@@ -59,12 +60,13 @@ To use checkfor as an MCP tool in Claude Code:
 {
   "mcpServers": {
     "checkfor": {
-      "command": "checkfor",
-      "args": ["--mcp"]
+      "command": "checkfor"
     }
   }
 }
 ```
+
+Note: The `--mcp` flag is no longer needed - MCP mode is now the default behavior.
 
 **Step 2:** Restart Claude Code or reload MCP servers
 
@@ -76,29 +78,31 @@ Add this to your global `~/.claude/CLAUDE.md` to help Claude Code automatically 
 ## Tool Usage - Search Optimization
 
 ### When to use checkfor (MCP tool)
-Use the `checkfor` tool when searching a SINGLE directory at SINGLE depth (non-recursive) for a string pattern. This tool is optimized for token efficiency and returns minimal JSON output.
+Use the `checkfor` tool for controlled multi-directory searches at single depth (non-recursive). This tool is optimized for token efficiency with compact JSON output and per-directory results.
 
 **Use checkfor when:**
-- Verifying refactoring completion in a specific directory
-- Checking a single package/module directory for remaining instances of old patterns
-- Searching files in one directory without subdirectories
-- You need minimal, token-efficient output
+- Verifying refactoring completion across multiple packages/directories
+- Checking specific directories for remaining instances of old patterns
+- Searching files without recursing into subdirectories
+- You need minimal, token-efficient output with per-directory statistics
+- Filtering out specific patterns with exclude filters
 
 **Example:**
 
 checkfor tool with:
-- dir: "/absolute/path/to/directory"
-- search: "oldFunctionName"
+- dir: ["/path/to/pkg/handlers", "/path/to/pkg/models"] (optional, defaults to current directory)
+- search: "oldFunctionName" (required)
 - ext: ".go" (optional, filters by extension)
+- exclude: ["oldFunctionNames", "testOldFunction"] (optional, filters out matches)
 - case_insensitive: false (optional)
 - whole_word: false (optional)
 - context: 0 (optional, number of context lines)
+- hide_filter_stats: false (optional, hides original_matches and filtered_matches)
 
 
 ### When NOT to use checkfor
 - Recursive/deep directory searches (use Grep instead)
 - Complex regex patterns (use Grep instead)
-- Searching across multiple directories (use Grep instead)
 - When you need full file content (use Read instead)
 ```
 
@@ -120,104 +124,203 @@ go test -v -race -coverprofile="coverage.out" -covermode=atomic
 
 ## Usage
 
+### MCP Mode (Default)
+
+By default, checkfor runs as an MCP server:
+
 ```bash
-checkfor --dir <directory> --search <string> [options]
+checkfor
+```
+
+This starts the MCP server and waits for JSON-RPC requests on stdin. This is the primary mode for Claude Code integration.
+
+### CLI Mode
+
+To use checkfor in CLI mode (for testing or scripting), add the `--cli` flag:
+
+```bash
+checkfor --cli --search <string> [options]
 ```
 
 ### Required Flags
 
-- `--dir` - Directory to search
 - `--search` - String to search for
 
 ### Optional Flags
 
+- `--cli` - Run in CLI mode (default is MCP server mode)
+- `--dir` - Comma-separated list of directories to search (defaults to current directory)
 - `--ext` - File extension to filter (e.g., `.go`, `.txt`, `.js`)
+- `--exclude` - Comma-separated list of strings to exclude from results
 - `--case-insensitive` - Perform case-insensitive search
 - `--whole-word` - Match whole words only
 - `--context` - Number of context lines before and after each match (default: 0)
+- `--hide-filter-stats` - Hide original_matches and filtered_matches from output
 
 ## Examples
 
-### Basic search
+### Basic search (current directory)
 ```bash
-checkfor --dir ./src --search "oldFunctionName"
+checkfor --cli --search "oldFunctionName"
 ```
 
-### Search Go files only
+### Search specific directory
 ```bash
-checkfor --dir ./pkg/handlers --search "UserModel" --ext .go
+checkfor --cli --dir ./src --search "oldFunctionName"
+```
+
+### Search multiple directories
+```bash
+checkfor --cli --dir "./pkg/handlers,./pkg/models,./pkg/services" --search "UserModel" --ext .go
+```
+
+### Search with exclude filter
+```bash
+checkfor --cli --dir ./pkg --search "m.Table" --exclude "m.Tables,m.TableName" --ext .go
 ```
 
 ### Case-insensitive search
 ```bash
-checkfor --dir ./templates --search "todo" --case-insensitive
+checkfor --cli --search "todo" --case-insensitive
 ```
 
 ### Whole word matching
 ```bash
-checkfor --dir ./utils --search "log" --whole-word --ext .go
+checkfor --cli --search "log" --whole-word --ext .go
 ```
 
 ### With context lines
 ```bash
-checkfor --dir ./services --search "deprecated" --context 2
+checkfor --cli --dir ./services --search "deprecated" --context 2
+```
+
+### Hide filter statistics
+```bash
+checkfor --cli --search "old" --exclude "older" --hide-filter-stats
 ```
 
 ## Best Practices
 
-- **Plan verification steps:** Include specific checkfor commands in your plans to ensure systematic progress tracking
-- **Verify incrementally:** Run checkfor after each major file change to catch issues early
-- **Track progress:** Use match counts to measure refactoring completion (e.g., "32 matches → 17 matches → 0 matches")
-- **Document patterns:** Note which patterns to search for in your project documentation
+- **Plan verification steps:** Include specific checkfor searches in your refactoring plans
+- **Verify incrementally:** Check progress after each major change
+- **Track progress per directory:** Use per-directory match counts to see which packages are clean
+- **Use exclude filters:** Filter out known false positives or related patterns
+- **Monitor filter stats:** Track `original_matches` vs `filtered_matches` to verify exclude patterns work correctly
 - **Use whole-word matching:** Add `--whole-word` flag to avoid false positives from similar names
 - **Add context when needed:** Use `--context 1` or `--context 2` to understand surrounding code
 
 ## Output Format
 
-The tool outputs JSON with the following structure:
+The tool outputs compact JSON with per-directory results for optimal AI consumption:
+
+### Single Directory
+
+```json
+{"directories":[{"dir":".","matches_found":2,"files":[{"path":"handler.go","matches":[{"line":42,"content":"  result := oldFunctionName()"}]}]}]}
+```
+
+### Multiple Directories with Exclude Filter
+
+```json
+{"directories":[{"dir":"./pkg/handlers","matches_found":3,"original_matches":5,"filtered_matches":2,"files":[{"path":"user.go","matches":[{"line":42,"content":"m.Table(\"users\")"}]}]},{"dir":"./pkg/models","matches_found":0,"files":[]}]}
+```
+
+### Pretty-printed Example (for documentation)
 
 ```json
 {
-  "matches_found": 2,
-  "files": [
+  "directories": [
     {
-      "path": "handler.go",
-      "matches": [
+      "dir": "./pkg/handlers",
+      "matches_found": 2,
+      "original_matches": 4,
+      "filtered_matches": 2,
+      "files": [
         {
-          "line": 42,
-          "content": "  result := oldFunctionName()",
-          "context_before": [
-            "func processRequest() {",
-            "  // Process the request"
-          ],
-          "context_after": [
-            "  return result",
-            "}"
+          "path": "handler.go",
+          "matches": [
+            {
+              "line": 42,
+              "content": "  result := oldFunctionName()",
+              "context_before": [
+                "func processRequest() {",
+                "  // Process the request"
+              ],
+              "context_after": [
+                "  return result",
+                "}"
+              ]
+            }
           ]
         }
       ]
+    },
+    {
+      "dir": "./pkg/models",
+      "matches_found": 0,
+      "files": []
     }
   ]
 }
 ```
 
+### Output Fields
+
+**Per Directory:**
+- `dir` - Directory path
+- `matches_found` - Total matches in this directory after filtering
+- `original_matches` - Total matches before filtering (only when exclude is used and not hidden)
+- `filtered_matches` - Number of matches filtered out (only when exclude is used and not hidden)
+- `files` - Array of files with matches (relative paths)
+
+**Per File:**
+- `path` - File path relative to directory
+- `matches` - Array of match objects
+
+**Per Match:**
+- `line` - Line number
+- `content` - Line content
+- `context_before` - Lines before match (if --context specified)
+- `context_after` - Lines after match (if --context specified)
+
 ## Performance
 
-checkfor is designed for token efficiency during AI-assisted refactoring workflows. In a real-world multi-phase refactoring session:
+checkfor is designed for token efficiency during AI-assisted refactoring workflows:
+
+### Token Savings
+
+- **Compact JSON:** 41% smaller than pretty-printed JSON
+- **Relative paths:** 68% reduction in path data for multi-file results
+- **Per-directory structure:** Direct access to statistics without parsing
+
+### Real-World Comparison
+
+In a multi-phase refactoring session:
 
 - **~8,000 tokens** used with checkfor
 - **~155,250 tokens** would have been used with Read tool (19.4x more efficient)
 - **~35,100 tokens** would have been used with Grep tool (4.4x more efficient)
 
-This efficiency prevented exceeding the 200K token context limit and enabled completion in a single session, saving approximately $1.77 in API costs for the project.
+This efficiency prevented exceeding the 200K token context limit and enabled completion in a single session, saving approximately $1.77 in API costs.
 
 **Key benefits:**
 - 95% token reduction vs Read tool
 - 77% token reduction vs Grep tool
+- 41% reduction via compact JSON output
+- 68% path data reduction via relative paths
 - 3-5x faster response time
 - Near-zero error rate with exact counts
+- Better AI reasoning with per-directory results
 
 See [detailed case study](docs/CASE_STUDY.md) for full analysis with real-world data.
+
+## Architecture
+
+- **Default mode:** MCP server (JSON-RPC 2.0 over stdin/stdout)
+- **CLI mode:** Direct JSON output (requires `--cli` flag)
+- **Single-depth:** Non-recursive scanning per directory
+- **Multi-directory:** Controlled searches across specific directories
+- **Per-directory results:** Organized output with directory-specific statistics
 
 ## Exit Codes
 

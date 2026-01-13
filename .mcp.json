@@ -1,8 +1,7 @@
 {
   "mcpServers": {
     "checkfor": {
-      "command": "checkfor",
-      "args": ["--mcp"]
+      "command": "checkfor"
     }
   }
 }
