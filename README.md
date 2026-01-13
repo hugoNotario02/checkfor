@@ -1,5 +1,6 @@
 # checkfor
 
+[![Tests](https://github.com/hegner123/checkfor/actions/workflows/test.yml/badge.svg)](https://github.com/hegner123/checkfor/actions/workflows/test.yml)
 [![Go Version](https://img.shields.io/badge/go-1.23-blue.svg)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hegner123/checkfor)](https://goreportcard.com/report/github.com/hegner123/checkfor)
