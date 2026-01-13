@@ -43,6 +43,42 @@ cp checkfor ~/bin/
 go test -v
 ```
 
+### Configure for Claude Code (Recommended)
+
+Add this to your global `~/.claude/CLAUDE.md` to help Claude Code use checkfor optimally:
+
+```markdown
+## Tool Usage - Search Optimization
+
+### When to use checkfor (MCP tool)
+Use the `checkfor` tool when searching a SINGLE directory at SINGLE depth (non-recursive) for a string pattern. This tool is optimized for token efficiency and returns minimal JSON output.
+
+**Use checkfor when:**
+- Verifying refactoring completion in a specific directory
+- Checking a single package/module directory for remaining instances of old patterns
+- Searching files in one directory without subdirectories
+- You need minimal, token-efficient output
+
+**Example:**
+```
+checkfor tool with:
+- dir: "/absolute/path/to/directory"
+- search: "oldFunctionName"
+- ext: ".go" (optional, filters by extension)
+- case_insensitive: false (optional)
+- whole_word: false (optional)
+- context: 0 (optional, number of context lines)
+```
+
+### When NOT to use checkfor
+- Recursive/deep directory searches (use Grep instead)
+- Complex regex patterns (use Grep instead)
+- Searching across multiple directories (use Grep instead)
+- When you need full file content (use Read instead)
+```
+
+This helps Claude Code automatically choose the most efficient tool for verification tasks.
+
 ## Usage
 
 ```bash
@@ -88,6 +124,15 @@ checkfor --dir ./utils --search "log" --whole-word --ext .go
 checkfor --dir ./services --search "deprecated" --context 2
 ```
 
+## Best Practices
+
+- **Plan verification steps:** Include specific checkfor commands in your plans to ensure systematic progress tracking
+- **Verify incrementally:** Run checkfor after each major file change to catch issues early
+- **Track progress:** Use match counts to measure refactoring completion (e.g., "32 matches → 17 matches → 0 matches")
+- **Document patterns:** Note which patterns to search for in your project documentation
+- **Use whole-word matching:** Add `--whole-word` flag to avoid false positives from similar names
+- **Add context when needed:** Use `--context 1` or `--context 2` to understand surrounding code
+
 ## Output Format
 
 The tool outputs JSON with the following structure:
@@ -116,14 +161,6 @@ The tool outputs JSON with the following structure:
   ]
 }
 ```
-
-## Use Case
-
-This tool is optimized for refactoring verification:
-1. You refactor code across multiple files
-2. Run `checkfor` to verify no instances of old patterns remain
-3. JSON output is minimal and token-efficient
-4. Single-depth scanning focuses on specific packages/modules
 
 ## MCP Server Mode
 
@@ -158,6 +195,24 @@ Once configured, the `checkfor` tool will be available in Claude Code as an MCP 
 - `case_insensitive` - Case-insensitive search (optional)
 - `whole_word` - Match whole words only (optional)
 - `context` - Number of context lines (optional)
+
+## Performance
+
+checkfor is designed for token efficiency during AI-assisted refactoring workflows. In a real-world multi-phase refactoring session:
+
+- **~8,000 tokens** used with checkfor
+- **~155,250 tokens** would have been used with Read tool (19.4x more efficient)
+- **~35,100 tokens** would have been used with Grep tool (4.4x more efficient)
+
+This efficiency prevented exceeding the 200K token context limit and enabled completion in a single session, saving approximately $1.77 in API costs for the project.
+
+**Key benefits:**
+- 95% token reduction vs Read tool
+- 77% token reduction vs Grep tool
+- 3-5x faster response time
+- Near-zero error rate with exact counts
+
+See [detailed case study](docs/CASE_STUDY.md) for full analysis with real-world data.
 
 ## Exit Codes
 

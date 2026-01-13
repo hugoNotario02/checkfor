@@ -12,8 +12,6 @@ linters:
 linters-settings:
   errcheck:
     check-blank: true
-  govet:
-    check-shadowing: false
 
 issues:
   exclude-use-default: false
