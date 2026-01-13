@@ -18,34 +18,59 @@ A lightweight CLI tool for searching files in a directory with JSON output. Desi
 
 ## Installation
 
-### Build from source
+### 1. Build from source
 
 ```bash
 go build -o checkfor
 ```
 
-### Install to system PATH
+### 2. Install to PATH (Required for MCP mode)
 
+Installing checkfor to your system PATH allows:
+- **CLI usage from anywhere**: Run `checkfor` from any directory
+- **MCP server integration**: Claude Code requires the binary in PATH to launch it as an MCP server
+- **Script integration**: Use checkfor in shell scripts and automation workflows
+
+**System-wide installation** (recommended):
 ```bash
 sudo cp checkfor /usr/local/bin/
 ```
 
-Or install to user-local bin (ensure `~/bin` or `~/.local/bin` is in your PATH):
-
+**User-local installation** (if you don't have sudo access):
 ```bash
 mkdir -p ~/bin
 cp checkfor ~/bin/
+# Add ~/bin to PATH if not already (add to ~/.bashrc or ~/.zshrc):
+export PATH="$HOME/bin:$PATH"
 ```
 
-### Run tests
-
+Verify installation:
 ```bash
-go test -v
+checkfor --help
 ```
 
-### Configure for Claude Code (Recommended)
+### 3. MCP Server Setup (For Claude Code Integration)
 
-Add this to your global `~/.claude/CLAUDE.md` to help Claude Code use checkfor optimally:
+To use checkfor as an MCP tool in Claude Code:
+
+**Step 1:** Add to your Claude Code MCP configuration (`~/.claude/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "checkfor": {
+      "command": "checkfor",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+**Step 2:** Restart Claude Code or reload MCP servers
+
+**Step 3 (Optional but Recommended):** Optimize Claude Code's tool selection
+
+Add this to your global `~/.claude/CLAUDE.md` to help Claude Code automatically choose checkfor for verification tasks:
 
 ```markdown
 ## Tool Usage - Search Optimization
@@ -78,6 +103,20 @@ checkfor tool with:
 ```
 
 This helps Claude Code automatically choose the most efficient tool for verification tasks.
+
+### 4. Development (Optional)
+
+Run tests to verify your installation:
+
+```bash
+go test -v
+```
+
+Run tests with coverage:
+
+```bash
+go test -v -race -coverprofile="coverage.out" -covermode=atomic
+```
 
 ## Usage
 
@@ -161,40 +200,6 @@ The tool outputs JSON with the following structure:
   ]
 }
 ```
-
-## MCP Server Mode
-
-`checkfor` can run as an MCP (Model Context Protocol) server for integration with Claude Code and other MCP clients.
-
-### Setup
-
-1. Build and install the binary to your PATH (see Installation above)
-
-2. Add to your Claude Code MCP configuration (`~/.claude/mcp.json` or project `.mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "checkfor": {
-      "command": "checkfor",
-      "args": ["--mcp"]
-    }
-  }
-}
-```
-
-3. Restart Claude Code or reload MCP servers
-
-### Usage
-
-Once configured, the `checkfor` tool will be available in Claude Code as an MCP tool with the same parameters as the CLI:
-
-- `dir` - Directory path (absolute path required)
-- `search` - String pattern to search for
-- `ext` - File extension filter (optional)
-- `case_insensitive` - Case-insensitive search (optional)
-- `whole_word` - Match whole words only (optional)
-- `context` - Number of context lines (optional)
 
 ## Performance
 
