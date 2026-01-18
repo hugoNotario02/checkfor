@@ -122,6 +122,41 @@ Run tests with coverage:
 go test -v -race -coverprofile="coverage.out" -covermode=atomic
 ```
 
+## Updating
+
+checkfor includes automatic update notifications. When running as an MCP server, it checks for new versions every 6 hours and notifies you via stderr if an update is available.
+
+### Update to Latest Version
+
+```bash
+checkfor --update
+```
+
+This will:
+1. Check GitHub for the latest release
+2. Download and install the latest version using `go install`
+3. Notify you to restart your MCP server
+
+### Manual Update
+
+You can also update manually using Go:
+
+```bash
+go install github.com/hegner123/checkfor@latest
+```
+
+### Update Notifications
+
+When an update is available, you'll see:
+
+```
+[checkfor] Update available: v1.0.0 → v1.2.0
+[checkfor] GitHub: https://github.com/hegner123/checkfor/releases/tag/v1.2.0
+[checkfor] To update: checkfor --update
+```
+
+Update checks respect GitHub API rate limits (60 requests/hour for unauthenticated requests) by caching results in `~/.checkfor-update-cache`.
+
 ## Usage
 
 ### MCP Mode (Default)

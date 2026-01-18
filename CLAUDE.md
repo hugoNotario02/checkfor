@@ -6,6 +6,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `checkfor` is an MCP server tool for multi-directory file searching with compact JSON output. It's optimized for AI-driven, token-efficient verification during refactoring tasks. The tool operates primarily as an MCP server with an optional CLI mode for testing.
 
+## Updates
+
+### Automatic Update Notifications
+
+checkfor checks for updates every 6 hours when running as an MCP server. When a new version is available, you'll see stderr output like:
+
+```
+[checkfor] Update available: v1.0.0 → v1.2.0
+[checkfor] GitHub: https://github.com/hegner123/checkfor/releases/tag/v1.2.0
+[checkfor] To update: checkfor --update
+```
+
+### Updating checkfor
+
+When Claude sees an update notification:
+
+1. **Inform the user** about the available update
+2. **Ask permission** to update
+3. **Run the update**:
+   ```bash
+   checkfor --update
+   ```
+4. **Restart the MCP server** (inform user they need to restart Claude Code or reload MCP servers)
+
+Alternatively, users can update manually:
+```bash
+go install github.com/hegner123/checkfor@latest
+```
+
+### Update Cache
+
+Update checks are cached in `~/.checkfor-update-cache` to respect GitHub API rate limits (60 requests/hour unauthenticated). The cache is valid for 6 hours during alpha development.
+
 ## Build and Development Commands
 
 ### Build
@@ -104,8 +137,19 @@ Key implementation details:
 
 The MCP server implements three JSON-RPC methods:
 - `initialize`: Returns protocol version "2024-11-05" and server capabilities
+  - Includes `listChanged: true` capability for future dynamic tool updates
+  - Reports current version number
 - `tools/list`: Exposes the "checkfor" tool with its schema
 - `tools/call`: Executes searches and returns formatted results
+
+### Update Checking
+
+On MCP server startup, a background goroutine checks for updates:
+- Non-blocking check with 3-second timeout
+- Checks GitHub releases API for latest version
+- Caches results for 6 hours to respect rate limits
+- Notifies via stderr when updates are available
+- Semantic versioning comparison (major.minor.patch)
 
 ### Data Structures
 

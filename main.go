@@ -5,10 +5,33 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
+
+const VERSION = "1.0.0"
+
+const (
+	updateCacheFile     = ".checkfor-update-cache"
+	updateCheckInterval = 6 * time.Hour // Check every 6 hours during alpha
+	githubReleasesURL   = "https://api.github.com/repos/hegner123/checkfor/releases/latest"
+	httpTimeout         = 3 * time.Second
+)
+
+type GitHubRelease struct {
+	TagName string `json:"tag_name"`
+	HTMLURL string `json:"html_url"`
+}
+
+type UpdateCache struct {
+	LastCheck   time.Time `json:"last_check"`
+	LastVersion string    `json:"last_version"`
+}
 
 type Match struct {
 	Line          int      `json:"line"`
@@ -44,6 +67,7 @@ type Config struct {
 	Context         int
 	HideFilterStats bool
 	CLIMode         bool
+	Update          bool
 }
 
 // MCP JSON-RPC types
@@ -120,10 +144,18 @@ type ContentItem struct {
 func main() {
 	config := parseFlags()
 
+	if config.Update {
+		runUpdate()
+		return
+	}
+
 	if config.CLIMode {
 		runCLI(config)
 		return
 	}
+
+	// Background update check for MCP server mode
+	go checkForUpdatesBackground()
 
 	runMCPServer()
 }
@@ -133,6 +165,7 @@ func parseFlags() Config {
 	var dirStr string
 	var excludeStr string
 
+	flag.BoolVar(&config.Update, "update", false, "Update checkfor to the latest version")
 	flag.BoolVar(&config.CLIMode, "cli", false, "Run in CLI mode (default is MCP server mode)")
 	flag.StringVar(&dirStr, "dir", "", "Comma-separated list of directories to search (defaults to current directory)")
 	flag.StringVar(&config.Search, "search", "", "String to search for (required)")
@@ -222,12 +255,13 @@ func handleInitialize(req JSONRPCRequest) {
 		ProtocolVersion: "2024-11-05",
 		ServerInfo: ServerInfo{
 			Name:    "checkfor",
-			Version: "1.0.0",
+			Version: VERSION,
 		},
 		Capabilities: Capabilities{
 			Tools: map[string]bool{
-				"list": true,
-				"call": true,
+				"list":        true,
+				"call":        true,
+				"listChanged": true,
 			},
 		},
 	}
@@ -410,6 +444,169 @@ func sendError(id any, code int, message string) {
 		return
 	}
 	fmt.Println(string(data))
+}
+
+// Update checking and installation
+
+func checkForUpdatesBackground() {
+	cache, err := loadUpdateCache()
+	if err == nil && time.Since(cache.LastCheck) < updateCheckInterval {
+		return // Skip check, too soon
+	}
+
+	latestVersion, releaseURL, err := fetchLatestVersion()
+	if err != nil {
+		// Silently fail - don't spam stderr on network issues
+		return
+	}
+
+	if compareVersions(latestVersion, VERSION) > 0 {
+		fmt.Fprintf(os.Stderr, "[checkfor] Update available: v%s → %s\n", VERSION, latestVersion)
+		fmt.Fprintf(os.Stderr, "[checkfor] GitHub: %s\n", releaseURL)
+		fmt.Fprintf(os.Stderr, "[checkfor] To update: checkfor --update\n")
+	}
+
+	// Save cache
+	cache = &UpdateCache{
+		LastCheck:   time.Now(),
+		LastVersion: latestVersion,
+	}
+	_ = saveUpdateCache(cache) // Ignore errors
+}
+
+func runUpdate() {
+	fmt.Println("Checking for updates...")
+
+	latestVersion, releaseURL, err := fetchLatestVersion()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error checking for updates: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Current version: v%s\n", VERSION)
+	fmt.Printf("Latest version: %s\n", latestVersion)
+
+	comparison := compareVersions(latestVersion, VERSION)
+	if comparison <= 0 {
+		fmt.Println("You are already on the latest version.")
+		return
+	}
+
+	fmt.Printf("\nUpdating checkfor to %s...\n", latestVersion)
+	fmt.Printf("Release: %s\n\n", releaseURL)
+
+	// Run go install
+	cmd := exec.Command("go", "install", "github.com/hegner123/checkfor@latest")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("\nUpdate complete! Restart your MCP server to use the new version.")
+}
+
+func fetchLatestVersion() (version, url string, err error) {
+	client := &http.Client{Timeout: httpTimeout}
+
+	req, err := http.NewRequest("GET", githubReleasesURL, nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Set User-Agent to identify our tool
+	req.Header.Set("User-Agent", fmt.Sprintf("checkfor/%s", VERSION))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", "", err
+	}
+
+	// Strip 'v' prefix if present
+	version = strings.TrimPrefix(release.TagName, "v")
+
+	return version, release.HTMLURL, nil
+}
+
+func compareVersions(v1, v2 string) int {
+	// Simple semantic version comparison (major.minor.patch)
+	// Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+
+	parts1 := strings.Split(strings.TrimPrefix(v1, "v"), ".")
+	parts2 := strings.Split(strings.TrimPrefix(v2, "v"), ".")
+
+	for i := 0; i < 3; i++ {
+		var n1, n2 int
+
+		if i < len(parts1) {
+			n1, _ = strconv.Atoi(parts1[i])
+		}
+		if i < len(parts2) {
+			n2, _ = strconv.Atoi(parts2[i])
+		}
+
+		if n1 > n2 {
+			return 1
+		}
+		if n1 < n2 {
+			return -1
+		}
+	}
+
+	return 0
+}
+
+func getUpdateCachePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, updateCacheFile), nil
+}
+
+func loadUpdateCache() (*UpdateCache, error) {
+	cachePath, err := getUpdateCachePath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var cache UpdateCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, err
+	}
+
+	return &cache, nil
+}
+
+func saveUpdateCache(cache *UpdateCache) error {
+	cachePath, err := getUpdateCachePath()
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(cachePath, data, 0644)
 }
 
 func searchDirectories(config Config) (*Result, error) {
